@@ -1,299 +1,200 @@
 package com.khiconjk.rootadbenabler;
 
-import android.app.Activity;
-import android.content.Intent;
-import android.content.SharedPreferences;
-import android.net.Uri;
-import android.os.Bundle;
-import android.text.TextUtils;
-import android.view.Gravity;
-import android.view.View;
-import android.widget.Button;
-import android.widget.CompoundButton;
-import android.widget.LinearLayout;
-import android.widget.ScrollView;
-import android.widget.Switch;
-import android.widget.TextView;
-import android.widget.Toast;
+import android.content.Context;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
+import java.util.concurrent.TimeUnit;
 
-public class MainActivity extends Activity {
-    private static final int REQ_PICK_ADB_KEY_IMPORT_ONLY = 1001;
-    private static final int REQ_PICK_ADB_KEY_TRUST_ALWAYS = 1002;
+public final class SuRunner {
+    private SuRunner() {}
 
-    private static final String PREFS = "root_adb_enabler";
-    static final String PREF_BOOT_USB = "boot_usb_adb";
-    static final String PREF_BOOT_TRUST_PC = "boot_trust_pc";
-    static final String PREF_SAVED_PC_KEY = "saved_pc_adb_pub_key";
+    public static final class Result {
+        public final int exitCode;
+        public final String output;
 
-    private TextView logView;
-    private Button btnEnableUsb;
-    private Button btnImportKey;
-    private Button btnTrustAlways;
-    private Button btnTrustSystemKey;
-    private Button btnReapplyTrust;
-    private Button btnRestart;
-    private Button btnStatus;
-    private Button btnCopyTrillImg;
-    private Switch swBootUsb;
-    private Switch swBootTrust;
-    private SharedPreferences prefs;
+        public Result(int exitCode, String output) {
+            this.exitCode = exitCode;
+            this.output = output == null ? "" : output;
+        }
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
-        buildUi();
-        appendLog("Root ADB Enabler\n");
-        appendLog("- Cấp root cho app khi KernelSU/Magisk hỏi.\n");
-        appendLog("- Đã bỏ chức năng ADB Wi-Fi/TCP 5555.\n");
-        appendLog("- Đã bỏ chức năng xóa key trust đã lưu.\n");
-        appendLog("- Nếu đã đặt key tại /system/etc/adbkey.pub: bấm Trust từ /system/etc/adbkey.pub.\n");
-        appendLog("- Copy Trill WebView img sẽ xuất ra /data/media/0/RootAdbEnabler để dễ hoạt động hơn /sdcard.\n");
-        appendLog("- Sau factory reset: key trong /system còn, nhưng app cũng phải được cài dạng system app/priv-app để tự chạy lại.\n\n");
+        public boolean ok() {
+            return exitCode == 0;
+        }
     }
 
-    private void buildUi() {
-        int pad = dp(14);
+    private static final String ROOT_PATH =
+            "/system/bin:/system/xbin:/vendor/bin:/odm/bin:/product/bin:" +
+            "/data/adb/ksu/bin:/data/adb/magisk:/debug_ramdisk:/sbin";
 
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(pad, pad, pad, pad);
-        root.setGravity(Gravity.CENTER_HORIZONTAL);
+    private static final String[] SU_CANDIDATES = new String[] {
+            "/system/bin/su",
+            "/system/xbin/su",
+            "/sbin/su",
+            "/su/bin/su",
+            "/data/adb/ksu/bin/su",
+            "/data/adb/magisk/su",
+            "/debug_ramdisk/su",
+            "/vendor/bin/su",
+            "/product/bin/su",
+            "su"
+    };
 
-        TextView title = new TextView(this);
-        title.setText("Root ADB Enabler SystemKey");
-        title.setTextSize(24);
-        title.setGravity(Gravity.CENTER);
-        title.setPadding(0, 0, 0, dp(10));
-        root.addView(title, new LinearLayout.LayoutParams(-1, -2));
-
-        btnEnableUsb = makeButton("Bật ADB USB");
-        btnImportKey = makeButton("Import adbkey.pub 1 lần");
-        btnTrustAlways = makeButton("Trust PC luôn / tự khôi phục sau reboot");
-        btnTrustSystemKey = makeButton("Trust từ /system/etc/adbkey.pub");
-        btnReapplyTrust = makeButton("Khôi phục trust PC tự động");
-        btnRestart = makeButton("Restart adbd");
-        btnStatus = makeButton("Kiểm tra trạng thái");
-        btnCopyTrillImg = makeButton("Copy Trill WebView img ra bộ nhớ trong");
-
-        root.addView(btnEnableUsb);
-        root.addView(btnImportKey);
-        root.addView(btnTrustAlways);
-        root.addView(btnTrustSystemKey);
-        root.addView(btnReapplyTrust);
-        root.addView(btnRestart);
-        root.addView(btnStatus);
-        root.addView(btnCopyTrillImg);
-
-        swBootUsb = makeSwitch("Tự bật ADB USB sau khi khởi động");
-        swBootTrust = makeSwitch("Tự phục hồi trust PC sau khi khởi động");
-        swBootUsb.setChecked(prefs.getBoolean(PREF_BOOT_USB, false));
-        swBootTrust.setChecked(prefs.getBoolean(PREF_BOOT_TRUST_PC, false));
-        root.addView(swBootUsb);
-        root.addView(swBootTrust);
-
-        logView = new TextView(this);
-        logView.setTextSize(13);
-        logView.setTextIsSelectable(true);
-        logView.setPadding(dp(10), dp(10), dp(10), dp(10));
-
-        ScrollView scroll = new ScrollView(this);
-        scroll.addView(logView, new ScrollView.LayoutParams(-1, -2));
-        LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(-1, 0, 1f);
-        scrollParams.setMargins(0, dp(10), 0, 0);
-        root.addView(scroll, scrollParams);
-
-        setContentView(root);
-
-        btnEnableUsb.setOnClickListener(v -> runRoot("Bật ADB USB", AdbCommands.enableUsbAdb()));
-        btnRestart.setOnClickListener(v -> runRoot("Restart adbd", AdbCommands.restartAdbd()));
-        btnStatus.setOnClickListener(v -> runRoot("Kiểm tra trạng thái", AdbCommands.status()));
-        btnCopyTrillImg.setOnClickListener(v -> runRoot("Copy Trill WebView img ra bộ nhớ trong", AdbCommands.copyTrillWebviewImg()));
-        btnImportKey.setOnClickListener(v -> pickAdbKey(REQ_PICK_ADB_KEY_IMPORT_ONLY));
-        btnTrustAlways.setOnClickListener(v -> pickAdbKey(REQ_PICK_ADB_KEY_TRUST_ALWAYS));
-        btnTrustSystemKey.setOnClickListener(v -> trustFromSystemKey());
-        btnReapplyTrust.setOnClickListener(v -> reapplySavedTrust());
-
-        swBootUsb.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            @Override
-            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                prefs.edit().putBoolean(PREF_BOOT_USB, isChecked).apply();
-                appendLog("Auto USB after boot: " + isChecked + "\n");
-            }
-        });
-
-        swBootTrust.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            @Override
-            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                prefs.edit().putBoolean(PREF_BOOT_TRUST_PC, isChecked).apply();
-                appendLog("Auto trust PC after boot: " + isChecked + "\n");
-            }
-        });
+    public static Result run(String script) {
+        return run(null, script);
     }
 
-    private Button makeButton(String text) {
-        Button b = new Button(this);
-        b.setText(text);
-        b.setAllCaps(false);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, dp(4), 0, dp(4));
-        b.setLayoutParams(lp);
-        return b;
-    }
+    public static Result run(Context context, String script) {
+        StringBuilder log = new StringBuilder();
 
-    private Switch makeSwitch(String text) {
-        Switch s = new Switch(this);
-        s.setText(text);
-        s.setTextSize(14);
-        s.setPadding(0, dp(8), 0, dp(4));
-        s.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
-        return s;
-    }
-
-    private void pickAdbKey(int requestCode) {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("*/*");
         try {
-            startActivityForResult(intent, requestCode);
+            log.append("===== FIND SU =====\n");
+
+            String suPath = findWorkingSu(log);
+
+            if (suPath == null) {
+                log.append("\nERROR: Không tìm thấy su hoạt động.\n");
+                log.append("Nguyên nhân thường gặp:\n");
+                log.append("- App chưa được cấp root trong KernelSU / KernelSU Next / Magisk.\n");
+                log.append("- ROM/root không expose binary su cho app thường.\n");
+                log.append("- App cần mở lại sau khi cấp quyền root.\n");
+                log.append("\nPackage: com.khiconjk.rootadbenabler\n");
+                return new Result(-1, log.toString());
+            }
+
+            log.append("\nUSING_SU=").append(suPath).append("\n");
+            log.append("===== RUN ROOT SCRIPT =====\n");
+
+            String safeScript =
+                    "export PATH=" + ROOT_PATH + ":$PATH\n" +
+                    "id\n" +
+                    "\n" +
+                    (script == null ? "" : script) +
+                    "\n";
+
+            ProcessBuilder pb = new ProcessBuilder(
+                    suPath,
+                    "-c",
+                    safeScript
+            );
+
+            pb.redirectErrorStream(true);
+            pb.environment().put("PATH", ROOT_PATH);
+
+            Process process = pb.start();
+            String output = readAll(process.getInputStream());
+
+            boolean finished = process.waitFor(120, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                log.append(output);
+                log.append("\nERROR: Root command timeout\n");
+                return new Result(-2, log.toString());
+            }
+
+            int exitCode = process.exitValue();
+
+            log.append(output);
+            return new Result(exitCode, log.toString());
+
         } catch (Exception e) {
-            Toast.makeText(this, "Không mở được trình chọn file", Toast.LENGTH_LONG).show();
-            appendLog("ERROR open picker: " + e.getMessage() + "\n");
+            log.append("\nEXCEPTION: ")
+                    .append(e.getClass().getSimpleName())
+                    .append(": ")
+                    .append(e.getMessage())
+                    .append("\n");
+            return new Result(-1, log.toString());
         }
     }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if ((requestCode == REQ_PICK_ADB_KEY_IMPORT_ONLY || requestCode == REQ_PICK_ADB_KEY_TRUST_ALWAYS)
-                && resultCode == RESULT_OK && data != null) {
-            Uri uri = data.getData();
-            if (uri == null) {
-                appendLog("Không lấy được URI adbkey.pub\n");
-                return;
-            }
-            try {
-                String key = readTextFromUri(uri).trim();
-                key = firstNonEmptyLine(key);
-                if (!looksLikeAdbPublicKey(key)) {
-                    appendLog("File không giống adbkey.pub hợp lệ. Nội dung cần là public key ADB của PC.\n");
-                    return;
-                }
+    private static String findWorkingSu(StringBuilder log) {
+        for (String path : SU_CANDIDATES) {
+            if (!"su".equals(path)) {
+                File f = new File(path);
+                log.append("check ")
+                        .append(path)
+                        .append(" exists=")
+                        .append(f.exists())
+                        .append(" canExecute=")
+                        .append(f.canExecute())
+                        .append("\n");
 
-                if (requestCode == REQ_PICK_ADB_KEY_TRUST_ALWAYS) {
-                    prefs.edit()
-                            .putString(PREF_SAVED_PC_KEY, key)
-                            .putBoolean(PREF_BOOT_TRUST_PC, true)
-                            .putBoolean(PREF_BOOT_USB, true)
-                            .apply();
-                    swBootTrust.setChecked(true);
-                    swBootUsb.setChecked(true);
-                    runRoot("Trust PC luôn", AdbCommands.trustPcAlways(key));
-                } else {
-                    runRoot("Import adbkey.pub 1 lần", AdbCommands.importAdbPublicKey(key));
+                if (!f.exists()) {
+                    continue;
                 }
-            } catch (Exception e) {
-                appendLog("ERROR read adbkey.pub: " + e.getMessage() + "\n");
+            } else {
+                log.append("check su from PATH\n");
+            }
+
+            if (testSu(path, log)) {
+                return path;
             }
         }
+
+        return null;
     }
 
-    private void trustFromSystemKey() {
-        prefs.edit()
-                .putBoolean(PREF_BOOT_TRUST_PC, true)
-                .putBoolean(PREF_BOOT_USB, true)
-                .apply();
-        swBootTrust.setChecked(true);
-        swBootUsb.setChecked(true);
-        runRoot("Trust từ /system/etc/adbkey.pub", AdbCommands.trustFromSystemEtcKey(true));
-    }
+    private static boolean testSu(String suPath, StringBuilder log) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(
+                    suPath,
+                    "-c",
+                    "export PATH=" + ROOT_PATH + ":$PATH; id"
+            );
 
-    private void reapplySavedTrust() {
-        String key = prefs.getString(PREF_SAVED_PC_KEY, "");
-        if (!TextUtils.isEmpty(key) && looksLikeAdbPublicKey(key)) {
-            runRoot("Khôi phục trust PC đã lưu trong app", AdbCommands.trustPcAlways(key));
-        } else {
-            runRoot("Khôi phục trust PC tự động", AdbCommands.reapplyBestTrustKey());
+            pb.redirectErrorStream(true);
+            pb.environment().put("PATH", ROOT_PATH);
+
+            Process process = pb.start();
+            String output = readAll(process.getInputStream());
+
+            boolean finished = process.waitFor(15, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                log.append("test ")
+                        .append(suPath)
+                        .append(" TIMEOUT\n");
+                return false;
+            }
+
+            int exitCode = process.exitValue();
+            String oneLine = output.replace("\n", " ").replace("\r", " ");
+
+            log.append("test ")
+                    .append(suPath)
+                    .append(" exit=")
+                    .append(exitCode)
+                    .append(" output=")
+                    .append(oneLine)
+                    .append("\n");
+
+            return exitCode == 0 && output.contains("uid=0");
+
+        } catch (Exception e) {
+            log.append("test ")
+                    .append(suPath)
+                    .append(" exception=")
+                    .append(e.getClass().getSimpleName())
+                    .append(": ")
+                    .append(e.getMessage())
+                    .append("\n");
+            return false;
         }
     }
 
-    private String readTextFromUri(Uri uri) throws Exception {
+    private static String readAll(InputStream inputStream) throws Exception {
         StringBuilder sb = new StringBuilder();
-        try (InputStream in = getContentResolver().openInputStream(uri);
-             BufferedReader br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(inputStream))) {
             String line;
+
             while ((line = br.readLine()) != null) {
                 sb.append(line).append('\n');
             }
         }
+
         return sb.toString();
-    }
-
-    private String firstNonEmptyLine(String text) {
-        if (text == null) return "";
-        String[] lines = text.replace("\r", "").split("\n");
-        for (String line : lines) {
-            String trimmed = line.trim();
-            if (!trimmed.isEmpty()) return trimmed;
-        }
-        return "";
-    }
-
-    private boolean looksLikeAdbPublicKey(String key) {
-        if (TextUtils.isEmpty(key)) return false;
-        if (key.length() < 80) return false;
-        if (key.contains("-----BEGIN") || key.contains("PRIVATE KEY")) return false;
-        if (key.contains("\n") || key.contains("\r")) return false;
-        return true;
-    }
-
-    private void runRoot(String title, String command) {
-        setButtonsEnabled(false);
-        appendLog("\n===== " + title + " =====\n");
-        new Thread(() -> {
-            SuRunner.Result result = SuRunner.run(command);
-            runOnUiThread(() -> {
-                appendLog(result.output);
-                appendLog("Exit code: " + result.exitCode + "\n");
-                if (!result.ok()) {
-                    appendLog("FAILED. Kiểm tra app đã được cấp root chưa.\n");
-                }
-                setButtonsEnabled(true);
-            });
-        }).start();
-    }
-
-    private void setButtonsEnabled(boolean enabled) {
-        Button[] buttons = {
-                btnEnableUsb,
-                btnImportKey,
-                btnTrustAlways,
-                btnTrustSystemKey,
-                btnReapplyTrust,
-                btnRestart,
-                btnStatus,
-                btnCopyTrillImg
-        };
-        for (Button b : buttons) {
-            if (b != null) b.setEnabled(enabled);
-        }
-    }
-
-    private void appendLog(String text) {
-        if (logView == null) return;
-        logView.append(text);
-        final View parent = (View) logView.getParent();
-        if (parent instanceof ScrollView) {
-            parent.post(() -> ((ScrollView) parent).fullScroll(View.FOCUS_DOWN));
-        }
-    }
-
-    private int dp(int value) {
-        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 }
