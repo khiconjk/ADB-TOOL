@@ -8,6 +8,9 @@ on:
       - main
       - master
     paths:
+      - "**/*.java"
+      - "**/*.kt"
+      - "**/*.xml"
       - "**/*.gradle"
       - "**/*.gradle.kts"
       - "**/settings.gradle"
@@ -51,49 +54,80 @@ jobs:
         shell: bash
         run: |
           set -e
+
           echo "===== REPO ROOT ====="
           pwd
           ls -la
 
           SETTINGS_FILE="$(find . -maxdepth 5 \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) | head -n 1 || true)"
+
           if [ -z "$SETTINGS_FILE" ]; then
             echo "ERROR: Không tìm thấy settings.gradle hoặc settings.gradle.kts"
-            find . -maxdepth 5 -type f | sort
+            echo "Bạn cần upload source project Android, không phải chỉ upload APK/ZIP."
+            echo
+            echo "===== ALL FILES ====="
+            find . -maxdepth 6 -type f | sort
             exit 1
           fi
+
           PROJECT_DIR="$(dirname "$SETTINGS_FILE")"
+
           echo "Found settings file: $SETTINGS_FILE"
           echo "Project dir: $PROJECT_DIR"
+
           echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
-      - name: Show project files
+      - name: Show important project files
         shell: bash
         run: |
           set -e
           cd "${{ steps.locate.outputs.project_dir }}"
+
           echo "===== PROJECT DIR ====="
           pwd
           ls -la
+
+          echo
           echo "===== GRADLE FILES ====="
-          find . -maxdepth 5 \( -name 'gradlew' -o -name 'gradlew.bat' -o -name 'build.gradle' -o -name 'settings.gradle' -o -name 'gradle-wrapper.properties' \) -print | sort
-          echo "===== APP FILES ====="
-          find app -maxdepth 6 -type f | sort || true
+          find . -maxdepth 6 \( \
+            -name 'gradlew' -o \
+            -name 'gradlew.bat' -o \
+            -name 'build.gradle' -o \
+            -name 'settings.gradle' -o \
+            -name 'gradle-wrapper.properties' \
+          \) -print | sort
+
+          echo
+          echo "===== JAVA FILES ====="
+          find app/src -type f \( -name "*.java" -o -name "*.kt" -o -name "*.xml" \) -print | sort || true
+
+          echo
+          echo "===== AdbCommands.java ====="
+          if [ -f app/src/main/java/com/khiconjk/rootadbenabler/AdbCommands.java ]; then
+            sed -n '1,260p' app/src/main/java/com/khiconjk/rootadbenabler/AdbCommands.java
+          else
+            echo "AdbCommands.java not found"
+            find app/src -type f -name "AdbCommands.java" -print
+          fi
 
       - name: Build debug APK
         shell: bash
         run: |
-          set -e
+          set -o pipefail
           cd "${{ steps.locate.outputs.project_dir }}"
+
+          rm -f build.log
+
           if [ -f "./gradlew" ]; then
             echo "Using local Gradle Wrapper: ./gradlew"
             chmod +x ./gradlew
-            ./gradlew --version
-            ./gradlew clean assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log
+            ./gradlew --version | tee -a build.log
+            ./gradlew clean assembleDebug --no-daemon --stacktrace --warning-mode all 2>&1 | tee -a build.log
           else
-            echo "WARNING: ./gradlew not found"
-            echo "Using GitHub Actions Gradle fallback 8.9"
-            gradle --version
-            gradle clean assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log
+            echo "WARNING: ./gradlew not found" | tee -a build.log
+            echo "Using GitHub Actions Gradle fallback 8.9" | tee -a build.log
+            gradle --version | tee -a build.log
+            gradle clean assembleDebug --no-daemon --stacktrace --warning-mode all 2>&1 | tee -a build.log
           fi
 
       - name: Show real errors if build failed
@@ -101,25 +135,59 @@ jobs:
         shell: bash
         run: |
           cd "${{ steps.locate.outputs.project_dir }}" || exit 0
-          echo "===== HIGH SIGNAL ERRORS ====="
-          if [ -f build.log ]; then
-            grep -nEi "error:|failed|failure|exception|cannot find|not found|denied|compile|lint|aapt|manifest|gradle|sdk|minSdk|targetSdk|namespace|kotlin" build.log | tail -n 300 || true
-            echo
-            echo "===== LAST 300 LINES ====="
-            tail -n 300 build.log || true
-          else
-            echo "build.log not found"
-          fi
+
+          echo "===== BUILD LOG EXISTS? ====="
+          ls -lh build.log || true
+
+          echo
+          echo "===== FAILED TASKS ====="
+          grep -nE "> Task .*FAILED|FAILURE: Build failed|What went wrong|Execution failed|Caused by:|error:|ERROR:|cannot find symbol|not found|AAPT|Android resource linking failed|Manifest merger failed|compileDebugJavaWithJavac|parseDebugLocalResources|mergeDebugResources" build.log || true
+
+          echo
+          echo "===== CONTEXT AROUND FAILURE ====="
+          awk '
+            /FAILED|FAILURE:|What went wrong|Execution failed|Caused by:|error:|cannot find symbol|Android resource linking failed|Manifest merger failed/ {
+              start=NR-25
+              end=NR+80
+              if (start < 1) start=1
+              ranges[start]=end
+            }
+            { lines[NR]=$0 }
+            END {
+              for (s in ranges) {
+                e=ranges[s]
+                print "----- lines " s " to " e " -----"
+                for (i=s; i<=e; i++) {
+                  if (i in lines) print i ": " lines[i]
+                }
+              }
+            }
+          ' build.log || true
+
+          echo
+          echo "===== LAST 500 LINES ====="
+          tail -n 500 build.log || true
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: |
+            ${{ steps.locate.outputs.project_dir }}/build.log
+          if-no-files-found: warn
 
       - name: List APK outputs
         if: always()
         shell: bash
         run: |
           cd "${{ steps.locate.outputs.project_dir }}"
+
           echo "===== APK OUTPUTS ====="
           find . -type f -name "*.apk" -print -exec ls -lh {} \; || true
 
       - name: Upload debug APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: RootAdbEnabler-debug-apk
