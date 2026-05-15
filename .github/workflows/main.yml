@@ -1,0 +1,87 @@
+name: Build Root ADB Enabler APK
+
+on:
+  workflow_dispatch:
+
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "app/**"
+      - "build.gradle"
+      - "settings.gradle"
+      - "gradle/**"
+      - "gradlew"
+      - ".github/workflows/build-apk.yml"
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Show project tree
+        run: |
+          echo "===== ROOT FILES ====="
+          ls -la
+          echo
+          echo "===== APP FILES ====="
+          find app -maxdepth 3 -type f | sort || true
+
+      - name: Fix Gradle permission
+        run: |
+          chmod +x ./gradlew
+
+      - name: Check Gradle version
+        run: |
+          ./gradlew --version
+
+      - name: Build debug APK
+        run: |
+          set -e
+          ./gradlew clean assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log
+
+      - name: Show real errors if build failed
+        if: failure()
+        run: |
+          echo "===== HIGH SIGNAL ERRORS ====="
+          if [ -f build.log ]; then
+            grep -nEi "error:|failed|failure|exception|cannot find|not found|denied|compile|lint|aapt|manifest|gradle" build.log | tail -n 200 || true
+            echo
+            echo "===== LAST 300 LINES ====="
+            tail -n 300 build.log || true
+          else
+            echo "build.log not found"
+          fi
+
+      - name: List APK outputs
+        if: always()
+        run: |
+          echo "===== APK OUTPUTS ====="
+          find . -type f -name "*.apk" -print -exec ls -lh {} \;
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: RootAdbEnabler-debug-apk
+          path: |
+            app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
