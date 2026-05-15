@@ -73,39 +73,37 @@ public final class AdbCommands {
                 "pidof adbd 2>/dev/null || ps -A | grep '[a]dbd' || true\n";
     }
 
-    public static String copyTrillWebviewCookies() {
-    return ""
-            + "SRC='/data/data/com.ss.android.ugc.trill/app_webview/Default/Cookies'\n"
-            + "BASE='/storage/emulated/0/RootAdbEnabler'\n"
-            + "STAMP=\"$(date +%Y%m%d_%H%M%S 2>/dev/null || echo now)\"\n"
-            + "DEST=\"$BASE/trill_webview_Cookies_$STAMP\"\n"
-            + "\n"
-            + "echo \"===== COPY TRILL WEBVIEW Cookies =====\"\n"
-            + "echo \"SRC=$SRC\"\n"
-            + "echo \"BASE=$BASE\"\n"
-            + "echo \"DEST=$DEST\"\n"
-            + "\n"
-            + "if [ ! -e \"$SRC\" ]; then\n"
-            + "  echo \"ERROR: SRC not found: $SRC\"\n"
-            + "  echo \"Searching possible Cookies folders...\"\n"
-            + "  find /data/data/com.ss.android.ugc.trill -type d -iname '*Cookies*' 2>/dev/null || true\n"
-            + "  find /data/user/0/com.ss.android.ugc.trill -type d -iname '*Cookies*' 2>/dev/null || true\n"
-            + "  exit 1\n"
-            + "fi\n"
-            + "\n"
-            + "mkdir -p \"$BASE\" || exit 2\n"
-            + "mkdir -p \"$DEST\" || exit 3\n"
-            + "\n"
-            + "if [ -d \"$SRC\" ]; then\n"
-            + "  cp -rf \"$SRC\"/. \"$DEST\"/ || exit 4\n"
-            + "else\n"
-            + "  cp -f \"$SRC\" \"$DEST\"/ || exit 5\n"
-            + "fi\n"
-            + "\n"
-            + "sync || true\n"
-            + "echo \"DONE: copied to $DEST\"\n"
-            + "ls -la \"$DEST\" || true\n";
-}
+    public static String copyTrillWebviewImg() {
+        return "set -e\n" +
+                "SRC='/data/data/com.ss.android.ugc.trill/app_webview/Default/Cookies'\n" +
+                "BASE='/storage/emulated/0/RootAdbEnabler'\n" +
+                "STAMP=\"$(date +%Y%m%d_%H%M%S 2>/dev/null || echo now)\"\n" +
+                "DEST=\"$BASE/trill_webview_Cookies_$STAMP\"\n" +
+                "echo '===== COPY TRILL WEBVIEW Cookies ====='\n" +
+                "echo \"SRC=$SRC\"\n" +
+                "echo \"DEST=$DEST\"\n" +
+                "if [ ! -e \"$SRC\" ]; then\n" +
+                "  echo \"ERROR: SRC not found: $SRC\"\n" +
+                "  echo 'Searching possible Cookies folders...'\n" +
+                "  find /data/data/com.ss.android.ugc.trill -type d -iname '*Cookies*' 2>/dev/null || true\n" +
+                "  find /data/user/0/com.ss.android.ugc.trill -type d -iname '*Cookies*' 2>/dev/null || true\n" +
+                "  find /data/data/com.zhiliaoapp.musically -type d -iname '*Cookies*' 2>/dev/null || true\n" +
+                "  exit 1\n" +
+                "fi\n" +
+                "mkdir -p \"$BASE\" || exit 2\n" +
+                "rm -rf \"$DEST\"\n" +
+                "mkdir -p \"$DEST\" || exit 3\n" +
+                "if [ -d \"$SRC\" ]; then\n" +
+                "  cp -rf \"$SRC\"/. \"$DEST\"/ || exit 4\n" +
+                "else\n" +
+                "  cp -f \"$SRC\" \"$DEST\"/ || exit 5\n" +
+                "fi\n" +
+                "chmod -R u+rwX,go+rX \"$DEST\" 2>/dev/null || true\n" +
+                "sync || true\n" +
+                "echo '===== copied files ====='\n" +
+                "find \"$DEST\" -maxdepth 3 -type f 2>/dev/null | head -n 80 || true\n" +
+                "echo -n 'file_count='; find \"$DEST\" -type f 2>/dev/null | wc -l || true\n" +
+                "echo \"DONE: copied to $DEST\"\n";
     }
 
     public static String importAdbPublicKey(String publicKey) {
