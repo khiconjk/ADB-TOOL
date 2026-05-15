@@ -75,19 +75,20 @@ public final class AdbCommands {
 
     public static String copyTrillWebviewImg() {
         return "set -e\n" +
-                "SRC='/data/data/com.ss.android.ugc.trill/app_webview/Default/Cookies'\n" +
+                "SRC='/data/data/com.ss.android.ugc.trill/app_webview/Default/img'\n" +
                 "BASE='/storage/emulated/0/RootAdbEnabler'\n" +
                 "STAMP=\"$(date +%Y%m%d_%H%M%S 2>/dev/null || echo now)\"\n" +
-                "DEST=\"$BASE/trill_webview_Cookies_$STAMP\"\n" +
-                "echo '===== COPY TRILL WEBVIEW Cookies ====='\n" +
+                "DEST=\"$BASE/trill_webview_img_$STAMP\"\n" +
+                "echo '===== COPY TRILL WEBVIEW IMG ====='\n" +
                 "echo \"SRC=$SRC\"\n" +
                 "echo \"DEST=$DEST\"\n" +
                 "if [ ! -e \"$SRC\" ]; then\n" +
                 "  echo \"ERROR: SRC not found: $SRC\"\n" +
-                "  echo 'Searching possible Cookies folders...'\n" +
-                "  find /data/data/com.ss.android.ugc.trill -type d -iname '*Cookies*' 2>/dev/null || true\n" +
-                "  find /data/user/0/com.ss.android.ugc.trill -type d -iname '*Cookies*' 2>/dev/null || true\n" +
-                "  find /data/data/com.zhiliaoapp.musically -type d -iname '*Cookies*' 2>/dev/null || true\n" +
+                "  echo 'Searching possible img folders...'\n" +
+                "  find /data/data/com.ss.android.ugc.trill -type d -iname '*img*' 2>/dev/null || true\n" +
+                "  find /data/user/0/com.ss.android.ugc.trill -type d -iname '*img*' 2>/dev/null || true\n" +
+                "  find /data/data/com.zhiliaoapp.musically -type d -iname '*img*' 2>/dev/null || true\n" +
+                "  find /data/user/0/com.zhiliaoapp.musically -type d -iname '*img*' 2>/dev/null || true\n" +
                 "  exit 1\n" +
                 "fi\n" +
                 "mkdir -p \"$BASE\" || exit 2\n" +
