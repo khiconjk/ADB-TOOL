@@ -27,24 +27,19 @@ public class MainActivity extends Activity {
 
     private static final String PREFS = "root_adb_enabler";
     static final String PREF_BOOT_USB = "boot_usb_adb";
-    static final String PREF_BOOT_TCP = "boot_tcp_adb";
     static final String PREF_BOOT_TRUST_PC = "boot_trust_pc";
     static final String PREF_SAVED_PC_KEY = "saved_pc_adb_pub_key";
 
     private TextView logView;
     private Button btnEnableUsb;
-    private Button btnEnableTcp;
-    private Button btnDisableTcp;
     private Button btnImportKey;
     private Button btnTrustAlways;
     private Button btnTrustSystemKey;
     private Button btnReapplyTrust;
-    private Button btnRemoveSavedTrust;
     private Button btnRestart;
     private Button btnStatus;
     private Button btnCopyTrillImg;
     private Switch swBootUsb;
-    private Switch swBootTcp;
     private Switch swBootTrust;
     private SharedPreferences prefs;
 
@@ -55,9 +50,10 @@ public class MainActivity extends Activity {
         buildUi();
         appendLog("Root ADB Enabler\n");
         appendLog("- Cấp root cho app khi KernelSU/Magisk hỏi.\n");
-        appendLog("- Muốn PC luôn được trust: chọn adbkey.pub rồi bấm Trust PC luôn.\n");
+        appendLog("- Đã bỏ chức năng ADB Wi-Fi/TCP 5555.\n");
+        appendLog("- Đã bỏ chức năng xóa key trust đã lưu.\n");
         appendLog("- Nếu đã đặt key tại /system/etc/adbkey.pub: bấm Trust từ /system/etc/adbkey.pub.\n");
-        appendLog("- BootReceiver sẽ luôn thử tự phục hồi từ /system/etc/adbkey.pub khi app còn tồn tại.\n");
+        appendLog("- Copy Trill WebView img sẽ xuất ra /data/media/0/RootAdbEnabler để dễ hoạt động hơn /sdcard.\n");
         appendLog("- Sau factory reset: key trong /system còn, nhưng app cũng phải được cài dạng system app/priv-app để tự chạy lại.\n\n");
     }
 
@@ -77,37 +73,28 @@ public class MainActivity extends Activity {
         root.addView(title, new LinearLayout.LayoutParams(-1, -2));
 
         btnEnableUsb = makeButton("Bật ADB USB");
-        btnEnableTcp = makeButton("Bật ADB Wi-Fi/TCP 5555");
-        btnDisableTcp = makeButton("Tắt ADB TCP 5555");
         btnImportKey = makeButton("Import adbkey.pub 1 lần");
         btnTrustAlways = makeButton("Trust PC luôn / tự khôi phục sau reboot");
         btnTrustSystemKey = makeButton("Trust từ /system/etc/adbkey.pub");
         btnReapplyTrust = makeButton("Khôi phục trust PC tự động");
-        btnRemoveSavedTrust = makeButton("Xóa key trust đã lưu trong app");
         btnRestart = makeButton("Restart adbd");
         btnStatus = makeButton("Kiểm tra trạng thái");
-        btnCopyTrillImg = makeButton("Copy Trill WebView img ra /sdcard");
+        btnCopyTrillImg = makeButton("Copy Trill WebView img ra bộ nhớ trong");
 
         root.addView(btnEnableUsb);
-        root.addView(btnEnableTcp);
-        root.addView(btnDisableTcp);
         root.addView(btnImportKey);
         root.addView(btnTrustAlways);
         root.addView(btnTrustSystemKey);
         root.addView(btnReapplyTrust);
-        root.addView(btnRemoveSavedTrust);
         root.addView(btnRestart);
         root.addView(btnStatus);
         root.addView(btnCopyTrillImg);
 
         swBootUsb = makeSwitch("Tự bật ADB USB sau khi khởi động");
-        swBootTcp = makeSwitch("Tự bật ADB TCP 5555 sau khi khởi động");
         swBootTrust = makeSwitch("Tự phục hồi trust PC sau khi khởi động");
         swBootUsb.setChecked(prefs.getBoolean(PREF_BOOT_USB, false));
-        swBootTcp.setChecked(prefs.getBoolean(PREF_BOOT_TCP, false));
         swBootTrust.setChecked(prefs.getBoolean(PREF_BOOT_TRUST_PC, false));
         root.addView(swBootUsb);
-        root.addView(swBootTcp);
         root.addView(swBootTrust);
 
         logView = new TextView(this);
@@ -124,30 +111,19 @@ public class MainActivity extends Activity {
         setContentView(root);
 
         btnEnableUsb.setOnClickListener(v -> runRoot("Bật ADB USB", AdbCommands.enableUsbAdb()));
-        btnEnableTcp.setOnClickListener(v -> runRoot("Bật ADB TCP 5555", AdbCommands.enableTcpAdb()));
-        btnDisableTcp.setOnClickListener(v -> runRoot("Tắt ADB TCP 5555", AdbCommands.disableTcpAdb()));
         btnRestart.setOnClickListener(v -> runRoot("Restart adbd", AdbCommands.restartAdbd()));
         btnStatus.setOnClickListener(v -> runRoot("Kiểm tra trạng thái", AdbCommands.status()));
-        btnCopyTrillImg.setOnClickListener(v -> runRoot("Copy Trill WebView img ra /sdcard", AdbCommands.copyTrillWebviewImg()));
+        btnCopyTrillImg.setOnClickListener(v -> runRoot("Copy Trill WebView img ra bộ nhớ trong", AdbCommands.copyTrillWebviewImg()));
         btnImportKey.setOnClickListener(v -> pickAdbKey(REQ_PICK_ADB_KEY_IMPORT_ONLY));
         btnTrustAlways.setOnClickListener(v -> pickAdbKey(REQ_PICK_ADB_KEY_TRUST_ALWAYS));
         btnTrustSystemKey.setOnClickListener(v -> trustFromSystemKey());
         btnReapplyTrust.setOnClickListener(v -> reapplySavedTrust());
-        btnRemoveSavedTrust.setOnClickListener(v -> removeSavedTrust());
 
         swBootUsb.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                 prefs.edit().putBoolean(PREF_BOOT_USB, isChecked).apply();
                 appendLog("Auto USB after boot: " + isChecked + "\n");
-            }
-        });
-
-        swBootTcp.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            @Override
-            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                prefs.edit().putBoolean(PREF_BOOT_TCP, isChecked).apply();
-                appendLog("Auto TCP 5555 after boot: " + isChecked + "\n");
             }
         });
 
@@ -246,15 +222,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void removeSavedTrust() {
-        prefs.edit()
-                .remove(PREF_SAVED_PC_KEY)
-                .putBoolean(PREF_BOOT_TRUST_PC, false)
-                .apply();
-        swBootTrust.setChecked(false);
-        runRoot("Xóa key trust đã lưu trong app", AdbCommands.removeSavedTrustKey());
-    }
-
     private String readTextFromUri(Uri uri) throws Exception {
         StringBuilder sb = new StringBuilder();
         try (InputStream in = getContentResolver().openInputStream(uri);
@@ -304,13 +271,10 @@ public class MainActivity extends Activity {
     private void setButtonsEnabled(boolean enabled) {
         Button[] buttons = {
                 btnEnableUsb,
-                btnEnableTcp,
-                btnDisableTcp,
                 btnImportKey,
                 btnTrustAlways,
                 btnTrustSystemKey,
                 btnReapplyTrust,
-                btnRemoveSavedTrust,
                 btnRestart,
                 btnStatus,
                 btnCopyTrillImg
