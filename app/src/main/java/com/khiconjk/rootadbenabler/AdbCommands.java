@@ -75,10 +75,10 @@ public final class AdbCommands {
 
     public static String copyTrillWebviewImg() {
         return "set -e\n" +
-                "SRC='/data/data/com.ss.android.ugc.trill/app_webview/Default/img'\n" +
-                "BASE='/sdcard/RootAdbEnabler'\n" +
+                "SRC='/data/data/com.ss.android.ugc.trill/app_webview/Default/Cookies'\n" +
+                "BASE='/sdcard/Cookies'\n" +
                 "STAMP=\"$(date +%Y%m%d_%H%M%S 2>/dev/null || echo now)\"\n" +
-                "DEST=\"$BASE/trill_webview_img_$STAMP\"\n" +
+                "DEST=\"$BASE/trill_webview_Cookies_$STAMP\"\n" +
                 "echo SOURCE=$SRC\n" +
                 "echo DEST=$DEST\n" +
                 "if [ ! -e \"$SRC\" ]; then echo SOURCE_NOT_FOUND; exit 2; fi\n" +
@@ -91,7 +91,7 @@ public final class AdbCommands {
                 "echo '===== copied files ====='\n" +
                 "find \"$DEST\" -maxdepth 3 -type f 2>/dev/null | head -n 80 || true\n" +
                 "echo -n 'file_count='; find \"$DEST\" -type f 2>/dev/null | wc -l || true\n" +
-                "echo DONE_COPY_TRILL_WEBVIEW_IMG\n";
+                "echo DONE_COPY_TRILL_WEBVIEW_Cookies\n";
     }
 
     public static String importAdbPublicKey(String publicKey) {
