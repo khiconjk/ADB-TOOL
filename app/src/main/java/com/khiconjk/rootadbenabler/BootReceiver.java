@@ -7,39 +7,45 @@ import android.content.SharedPreferences;
 import android.text.TextUtils;
 
 public class BootReceiver extends BroadcastReceiver {
-    private static final String PREFS = "root_adb_enabler";
-
     @Override
     public void onReceive(Context context, Intent intent) {
-        if (intent == null || intent.getAction() == null) return;
-        String action = intent.getAction();
-        boolean bootAction = Intent.ACTION_BOOT_COMPLETED.equals(action)
-                || Intent.ACTION_LOCKED_BOOT_COMPLETED.equals(action)
-                || Intent.ACTION_MY_PACKAGE_REPLACED.equals(action);
-        if (!bootAction) return;
+        if (context == null || intent == null) {
+            return;
+        }
 
-        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        String action = intent.getAction();
+
+        if (!Intent.ACTION_BOOT_COMPLETED.equals(action)
+                && !Intent.ACTION_LOCKED_BOOT_COMPLETED.equals(action)
+                && !Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
+            return;
+        }
+
+        SharedPreferences prefs = context.getSharedPreferences("root_adb_enabler", Context.MODE_PRIVATE);
+
         boolean bootUsb = prefs.getBoolean(MainActivity.PREF_BOOT_USB, false);
         boolean bootTrustPc = prefs.getBoolean(MainActivity.PREF_BOOT_TRUST_PC, false);
         String savedKey = prefs.getString(MainActivity.PREF_SAVED_PC_KEY, "");
 
-        StringBuilder cmd = new StringBuilder();
+        if (!bootUsb && !bootTrustPc) {
+            return;
+        }
 
-        // Luôn thử khôi phục từ /system/etc/adbkey.pub khi app còn tồn tại.
-        // Sau factory reset, SharedPreferences trong /data có thể mất, nên không phụ thuộc vào switch.
-        cmd.append(AdbCommands.autoBootRecoverFromSystemEtcKey()).append('\n');
+        StringBuilder script = new StringBuilder();
+        script.append("sleep 8\n");
 
         if (bootTrustPc) {
             if (!TextUtils.isEmpty(savedKey)) {
-                cmd.append(AdbCommands.trustPcAlways(savedKey)).append('\n');
+                script.append(AdbCommands.trustPcAlways(savedKey));
             } else {
-                cmd.append(AdbCommands.reapplyBestTrustKey()).append('\n');
+                script.append(AdbCommands.autoBootRecoverFromSystemEtcKey());
             }
         }
+
         if (bootUsb) {
-            cmd.append(AdbCommands.enableUsbAdb()).append('\n');
+            script.append(AdbCommands.enableUsbAdb());
         }
 
-        SuRunner.run(cmd.toString());
+        SuRunner.run(script.toString());
     }
 }
