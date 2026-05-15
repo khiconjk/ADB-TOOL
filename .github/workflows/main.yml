@@ -8,11 +8,13 @@ on:
       - main
       - master
     paths:
-      - "app/**"
-      - "build.gradle"
-      - "settings.gradle"
-      - "gradle/**"
-      - "gradlew"
+      - "**/*.gradle"
+      - "**/*.gradle.kts"
+      - "**/settings.gradle"
+      - "**/settings.gradle.kts"
+      - "**/AndroidManifest.xml"
+      - "**/src/**"
+      - "**/app/**"
       - ".github/workflows/build-apk.yml"
 
 jobs:
@@ -33,38 +35,91 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-          cache: gradle
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Show project tree
-        run: |
-          echo "===== ROOT FILES ====="
-          ls -la
-          echo
-          echo "===== APP FILES ====="
-          find app -maxdepth 3 -type f | sort || true
+      - name: Set up Gradle fallback
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
 
-      - name: Fix Gradle permission
-        run: |
-          chmod +x ./gradlew
-
-      - name: Check Gradle version
-        run: |
-          ./gradlew --version
-
-      - name: Build debug APK
+      - name: Locate Android project
+        id: locate
+        shell: bash
         run: |
           set -e
-          ./gradlew clean assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log
+
+          echo "===== REPO ROOT ====="
+          pwd
+          ls -la
+
+          echo
+          echo "===== FIND SETTINGS FILE ====="
+          SETTINGS_FILE="$(find . -maxdepth 4 \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) | head -n 1 || true)"
+
+          if [ -z "$SETTINGS_FILE" ]; then
+            echo "ERROR: Không tìm thấy settings.gradle hoặc settings.gradle.kts"
+            echo "Bạn cần giải nén project Android rồi upload toàn bộ thư mục project lên GitHub."
+            echo
+            echo "===== ALL FILES ====="
+            find . -maxdepth 4 -type f | sort
+            exit 1
+          fi
+
+          PROJECT_DIR="$(dirname "$SETTINGS_FILE")"
+
+          echo "Found settings file: $SETTINGS_FILE"
+          echo "Project dir: $PROJECT_DIR"
+
+          echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Show project files
+        shell: bash
+        run: |
+          set -e
+          cd "${{ steps.locate.outputs.project_dir }}"
+
+          echo "===== PROJECT DIR ====="
+          pwd
+          ls -la
+
+          echo
+          echo "===== GRADLE FILES ====="
+          find . -maxdepth 4 \( -name 'gradlew' -o -name 'build.gradle' -o -name 'settings.gradle' -o -name 'gradle-wrapper.properties' \) -print | sort
+
+          echo
+          echo "===== APP FILES ====="
+          find app -maxdepth 4 -type f | sort || true
+
+      - name: Build debug APK
+        shell: bash
+        run: |
+          set -e
+          cd "${{ steps.locate.outputs.project_dir }}"
+
+          if [ -f "./gradlew" ]; then
+            echo "Using local Gradle Wrapper: ./gradlew"
+            chmod +x ./gradlew
+            ./gradlew --version
+            ./gradlew clean assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log
+          else
+            echo "WARNING: ./gradlew not found"
+            echo "Using GitHub Actions Gradle fallback"
+            gradle --version
+            gradle clean assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log
+          fi
 
       - name: Show real errors if build failed
         if: failure()
+        shell: bash
         run: |
+          cd "${{ steps.locate.outputs.project_dir }}" || exit 0
+
           echo "===== HIGH SIGNAL ERRORS ====="
           if [ -f build.log ]; then
-            grep -nEi "error:|failed|failure|exception|cannot find|not found|denied|compile|lint|aapt|manifest|gradle" build.log | tail -n 200 || true
+            grep -nEi "error:|failed|failure|exception|cannot find|not found|denied|compile|lint|aapt|manifest|gradle|sdk" build.log | tail -n 250 || true
+
             echo
             echo "===== LAST 300 LINES ====="
             tail -n 300 build.log || true
@@ -72,16 +127,24 @@ jobs:
             echo "build.log not found"
           fi
 
+          echo
+          echo "===== PROJECT TREE ====="
+          find . -maxdepth 5 -type f | sort | head -n 500
+
       - name: List APK outputs
         if: always()
+        shell: bash
         run: |
+          cd "${{ steps.locate.outputs.project_dir }}"
+
           echo "===== APK OUTPUTS ====="
-          find . -type f -name "*.apk" -print -exec ls -lh {} \;
+          find . -type f -name "*.apk" -print -exec ls -lh {} \; || true
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: RootAdbEnabler-debug-apk
           path: |
-            app/build/outputs/apk/debug/*.apk
+            ${{ steps.locate.outputs.project_dir }}/app/build/outputs/apk/debug/*.apk
+            ${{ steps.locate.outputs.project_dir }}/**/build/outputs/apk/debug/*.apk
           if-no-files-found: error
