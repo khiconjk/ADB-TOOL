@@ -20,7 +20,6 @@ public class BootReceiver extends BroadcastReceiver {
 
         SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         boolean bootUsb = prefs.getBoolean(MainActivity.PREF_BOOT_USB, false);
-        boolean bootTcp = prefs.getBoolean(MainActivity.PREF_BOOT_TCP, false);
         boolean bootTrustPc = prefs.getBoolean(MainActivity.PREF_BOOT_TRUST_PC, false);
         String savedKey = prefs.getString(MainActivity.PREF_SAVED_PC_KEY, "");
 
@@ -39,9 +38,6 @@ public class BootReceiver extends BroadcastReceiver {
         }
         if (bootUsb) {
             cmd.append(AdbCommands.enableUsbAdb()).append('\n');
-        }
-        if (bootTcp) {
-            cmd.append(AdbCommands.enableTcpAdb()).append('\n');
         }
 
         SuRunner.run(cmd.toString());
