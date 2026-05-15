@@ -115,3 +115,26 @@ vào Android tại:
 ```
 
 Không dùng file `adbkey` vì đó là private key.
+
+
+## Chức năng copy Trill WebView img
+
+Bản này thêm nút:
+
+```text
+Copy Trill WebView img ra /sdcard
+```
+
+Nguồn copy:
+
+```text
+/data/data/com.ss.android.ugc.trill/app_webview/Default/img
+```
+
+Nơi xuất file:
+
+```text
+/sdcard/RootAdbEnabler/trill_webview_img_YYYYMMDD_HHMMSS/
+```
+
+Nút này cần root và chỉ chạy khi người dùng bấm thủ công trong app.
