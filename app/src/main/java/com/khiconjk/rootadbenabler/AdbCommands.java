@@ -14,29 +14,6 @@ public final class AdbCommands {
                 "echo DONE_ENABLE_USB_ADB\n";
     }
 
-    public static String enableTcpAdb() {
-        return "set -e\n" +
-                "settings put global development_settings_enabled 1 || true\n" +
-                "settings put global adb_enabled 1 || true\n" +
-                "setprop service.adb.tcp.port 5555 || true\n" +
-                "setprop persist.adb.tcp.port 5555 || true\n" +
-                "stop adbd || true\n" +
-                "sleep 1\n" +
-                "start adbd || true\n" +
-                "ip -4 addr show 2>/dev/null | grep -oE 'inet ([0-9]{1,3}\\.){3}[0-9]{1,3}' | awk '{print $2}' || true\n" +
-                "echo DONE_ENABLE_TCP_5555\n";
-    }
-
-    public static String disableTcpAdb() {
-        return "set -e\n" +
-                "setprop service.adb.tcp.port -1 || true\n" +
-                "setprop persist.adb.tcp.port -1 || true\n" +
-                "stop adbd || true\n" +
-                "sleep 1\n" +
-                "start adbd || true\n" +
-                "echo DONE_DISABLE_TCP_ADB\n";
-    }
-
     public static String restartAdbd() {
         return "stop adbd || true\n" +
                 "sleep 1\n" +
@@ -53,8 +30,6 @@ public final class AdbCommands {
                 "echo '===== props ====='\n" +
                 "echo -n 'sys.usb.config='; getprop sys.usb.config || true\n" +
                 "echo -n 'persist.sys.usb.config='; getprop persist.sys.usb.config || true\n" +
-                "echo -n 'service.adb.tcp.port='; getprop service.adb.tcp.port || true\n" +
-                "echo -n 'persist.adb.tcp.port='; getprop persist.adb.tcp.port || true\n" +
                 "echo '===== system adbkey source ====='\n" +
                 "ls -lZ " + SYSTEM_KEY + " 2>/dev/null || true\n" +
                 "ls -lZ " + SYSTEM_KEY_FALLBACK + " 2>/dev/null || true\n" +
@@ -69,42 +44,69 @@ public final class AdbCommands {
                 "ls -ldZ " + TRUST_DIR + " 2>/dev/null || true\n" +
                 "ls -lZ " + TRUST_KEY + " 2>/dev/null || true\n" +
                 "echo -n 'saved_key_sha256='; sha256sum " + TRUST_KEY + " 2>/dev/null | awk '{print $1}' || true\n" +
+                "echo '===== copy source check ====='\n" +
+                "ls -ldZ /data/data/com.ss.android.ugc.trill/app_webview/Default/Cookies 2>/dev/null || true\n" +
+                "ls -ldZ /data/user/0/com.ss.android.ugc.trill/app_webview/Default/Cookies 2>/dev/null || true\n" +
+                "echo '===== copy dest check ====='\n" +
+                "ls -ldZ /data/media/0/RootAdbEnabler 2>/dev/null || true\n" +
+                "ls -ldZ /storage/emulated/0/RootAdbEnabler 2>/dev/null || true\n" +
                 "echo '===== adbd pid ====='\n" +
                 "pidof adbd 2>/dev/null || ps -A | grep '[a]dbd' || true\n";
     }
 
     public static String copyTrillWebviewImg() {
         return "set -e\n" +
-                "SRC='/data/data/com.ss.android.ugc.trill/app_webview/Default/img'\n" +
-                "BASE='/storage/emulated/0/RootAdbEnabler'\n" +
-                "STAMP=\"$(date +%Y%m%d_%H%M%S 2>/dev/null || echo now)\"\n" +
-                "DEST=\"$BASE/trill_webview_img_$STAMP\"\n" +
-                "echo '===== COPY TRILL WEBVIEW IMG ====='\n" +
-                "echo \"SRC=$SRC\"\n" +
-                "echo \"DEST=$DEST\"\n" +
-                "if [ ! -e \"$SRC\" ]; then\n" +
-                "  echo \"ERROR: SRC not found: $SRC\"\n" +
-                "  echo 'Searching possible img folders...'\n" +
-                "  find /data/data/com.ss.android.ugc.trill -type d -iname '*img*' 2>/dev/null || true\n" +
-                "  find /data/user/0/com.ss.android.ugc.trill -type d -iname '*img*' 2>/dev/null || true\n" +
-                "  find /data/data/com.zhiliaoapp.musically -type d -iname '*img*' 2>/dev/null || true\n" +
-                "  find /data/user/0/com.zhiliaoapp.musically -type d -iname '*img*' 2>/dev/null || true\n" +
+                "echo '===== COPY TRILL WEBVIEW Cookies ====='\n" +
+                "PKG1='com.ss.android.ugc.trill'\n" +
+                "PKG2='com.zhiliaoapp.musically'\n" +
+                "SRC=''\n" +
+                "for P in \"$PKG1\" \"$PKG2\"; do\n" +
+                "  for C in \\\n" +
+                "    /data/data/$P/app_webview/Default/Cookies \\\n" +
+                "    /data/user/0/$P/app_webview/Default/Cookies \\\n" +
+                "    /data/data/$P/app_webview/Default/Images \\\n" +
+                "    /data/user/0/$P/app_webview/Default/Images; do\n" +
+                "    if [ -e \"$C\" ]; then SRC=\"$C\"; break 2; fi\n" +
+                "  done\n" +
+                "done\n" +
+                "if [ -z \"$SRC\" ]; then\n" +
+                "  echo 'ERROR: default Cookies source not found'\n" +
+                "  echo 'Searching folders named Cookies under known TikTok packages...'\n" +
+                "  find /data/data/com.ss.android.ugc.trill /data/user/0/com.ss.android.ugc.trill /data/data/com.zhiliaoapp.musically /data/user/0/com.zhiliaoapp.musically -type d -iname 'Cookies' 2>/dev/null || true\n" +
                 "  exit 1\n" +
                 "fi\n" +
-                "mkdir -p \"$BASE\" || exit 2\n" +
-                "rm -rf \"$DEST\"\n" +
-                "mkdir -p \"$DEST\" || exit 3\n" +
+                "STAMP=\"$(date +%Y%m%d_%H%M%S 2>/dev/null || echo now)\"\n" +
+                "BASE='/data/media/0/RootAdbEnabler'\n" +
+                "DEST=\"$BASE/trill_webview_Cookies_$STAMP\"\n" +
+                "TMP=\"/data/local/tmp/root_adb_enabler_copy_$STAMP\"\n" +
+                "echo \"SRC=$SRC\"\n" +
+                "echo \"TMP=$TMP\"\n" +
+                "echo \"DEST=$DEST\"\n" +
+                "rm -rf \"$TMP\" \"$DEST\"\n" +
+                "mkdir -p \"$TMP\" || exit 2\n" +
+                "mkdir -p \"$BASE\" || exit 3\n" +
+                "mkdir -p \"$DEST\" || exit 4\n" +
                 "if [ -d \"$SRC\" ]; then\n" +
-                "  cp -rf \"$SRC\"/. \"$DEST\"/ || exit 4\n" +
+                "  if command -v tar >/dev/null 2>&1; then\n" +
+                "    (cd \"$SRC\" && tar cf - .) | (cd \"$TMP\" && tar xf -) || cp -rf \"$SRC\"/. \"$TMP\"/\n" +
+                "  else\n" +
+                "    cp -rf \"$SRC\"/. \"$TMP\"/\n" +
+                "  fi\n" +
                 "else\n" +
-                "  cp -f \"$SRC\" \"$DEST\"/ || exit 5\n" +
+                "  cp -f \"$SRC\" \"$TMP\"/\n" +
                 "fi\n" +
-                "chmod -R u+rwX,go+rX \"$DEST\" 2>/dev/null || true\n" +
+                "cp -rf \"$TMP\"/. \"$DEST\"/ || exit 5\n" +
+                "chmod -R 0777 \"$DEST\" 2>/dev/null || true\n" +
+                "chown -R media_rw:media_rw \"$DEST\" 2>/dev/null || chown -R 1023:1023 \"$DEST\" 2>/dev/null || true\n" +
+                "restorecon -R \"$DEST\" 2>/dev/null || true\n" +
+                "rm -rf \"$TMP\"\n" +
                 "sync || true\n" +
                 "echo '===== copied files ====='\n" +
-                "find \"$DEST\" -maxdepth 3 -type f 2>/dev/null | head -n 80 || true\n" +
+                "find \"$DEST\" -maxdepth 3 -type f 2>/dev/null | head -n 100 || true\n" +
                 "echo -n 'file_count='; find \"$DEST\" -type f 2>/dev/null | wc -l || true\n" +
-                "echo \"DONE: copied to $DEST\"\n";
+                "echo -n 'folder_size='; du -sh \"$DEST\" 2>/dev/null | awk '{print $1}' || true\n" +
+                "echo \"DONE: copied to $DEST\"\n" +
+                "echo \"OPEN_FROM_FILE_MANAGER=/storage/emulated/0/RootAdbEnabler/$(basename \"$DEST\")\"\n";
     }
 
     public static String importAdbPublicKey(String publicKey) {
@@ -180,13 +182,6 @@ public final class AdbCommands {
                 "else\n" +
                 "  echo NO_SYSTEM_ETC_ADBKEY_PUB_SKIP_AUTO_RECOVER\n" +
                 "fi\n";
-    }
-
-    public static String removeSavedTrustKey() {
-        return "set -e\n" +
-                "rm -f " + TRUST_KEY + " || true\n" +
-                "rmdir " + TRUST_DIR + " 2>/dev/null || true\n" +
-                "echo DONE_REMOVE_SAVED_TRUST_KEY\n";
     }
 
     private static String buildTrustScript(String publicKey, boolean saveForReboot) {
