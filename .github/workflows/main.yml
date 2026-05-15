@@ -63,24 +63,18 @@ jobs:
 
           if [ -z "$SETTINGS_FILE" ]; then
             echo "ERROR: Không tìm thấy settings.gradle hoặc settings.gradle.kts"
-            echo "Bạn cần upload source project Android, không phải chỉ upload APK/ZIP."
-            echo
-            echo "===== ALL FILES ====="
             find . -maxdepth 6 -type f | sort
             exit 1
           fi
 
           PROJECT_DIR="$(dirname "$SETTINGS_FILE")"
-
           echo "Found settings file: $SETTINGS_FILE"
           echo "Project dir: $PROJECT_DIR"
-
           echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
-      - name: Show important project files
+      - name: Show source files
         shell: bash
         run: |
-          set -e
           cd "${{ steps.locate.outputs.project_dir }}"
 
           echo "===== PROJECT DIR ====="
@@ -98,37 +92,64 @@ jobs:
           \) -print | sort
 
           echo
-          echo "===== JAVA FILES ====="
+          echo "===== JAVA / XML FILES ====="
           find app/src -type f \( -name "*.java" -o -name "*.kt" -o -name "*.xml" \) -print | sort || true
 
           echo
           echo "===== AdbCommands.java ====="
-          if [ -f app/src/main/java/com/khiconjk/rootadbenabler/AdbCommands.java ]; then
-            sed -n '1,260p' app/src/main/java/com/khiconjk/rootadbenabler/AdbCommands.java
-          else
-            echo "AdbCommands.java not found"
-            find app/src -type f -name "AdbCommands.java" -print
-          fi
+          find app/src -type f -name "AdbCommands.java" -print -exec sed -n '1,320p' {} \; || true
+
+          echo
+          echo "===== MainActivity.java ====="
+          find app/src -type f -name "MainActivity.java" -print -exec sed -n '1,360p' {} \; || true
+
+          echo
+          echo "===== AndroidManifest.xml ====="
+          find app/src -type f -name "AndroidManifest.xml" -print -exec sed -n '1,240p' {} \; || true
 
       - name: Build debug APK
+        id: build_apk
         shell: bash
         run: |
-          set -o pipefail
+          set +e
           cd "${{ steps.locate.outputs.project_dir }}"
 
-          rm -f build.log
+          rm -f build.log build-stacktrace.log
 
           if [ -f "./gradlew" ]; then
-            echo "Using local Gradle Wrapper: ./gradlew"
+            echo "Using local Gradle Wrapper" | tee -a build.log
             chmod +x ./gradlew
-            ./gradlew --version | tee -a build.log
-            ./gradlew clean assembleDebug --no-daemon --stacktrace --warning-mode all 2>&1 | tee -a build.log
+            GRADLE_CMD="./gradlew"
           else
             echo "WARNING: ./gradlew not found" | tee -a build.log
             echo "Using GitHub Actions Gradle fallback 8.9" | tee -a build.log
-            gradle --version | tee -a build.log
-            gradle clean assembleDebug --no-daemon --stacktrace --warning-mode all 2>&1 | tee -a build.log
+            GRADLE_CMD="gradle"
           fi
+
+          $GRADLE_CMD --version | tee -a build.log
+
+          echo
+          echo "===== NORMAL BUILD, EASY ERROR LOG =====" | tee -a build.log
+          $GRADLE_CMD clean assembleDebug \
+            --no-daemon \
+            --console=plain \
+            --warning-mode all \
+            2>&1 | tee -a build.log
+
+          STATUS=${PIPESTATUS[0]}
+
+          if [ "$STATUS" -ne 0 ]; then
+            echo
+            echo "===== STACKTRACE BUILD AFTER FAILURE =====" | tee -a build-stacktrace.log
+            $GRADLE_CMD assembleDebug \
+              --no-daemon \
+              --console=plain \
+              --stacktrace \
+              --warning-mode all \
+              2>&1 | tee -a build-stacktrace.log
+          fi
+
+          exit "$STATUS"
 
       - name: Show real errors if build failed
         if: failure()
@@ -136,45 +157,37 @@ jobs:
         run: |
           cd "${{ steps.locate.outputs.project_dir }}" || exit 0
 
-          echo "===== BUILD LOG EXISTS? ====="
-          ls -lh build.log || true
+          echo "===== BUILD LOG FILES ====="
+          ls -lh build.log build-stacktrace.log 2>/dev/null || true
 
           echo
-          echo "===== FAILED TASKS ====="
-          grep -nE "> Task .*FAILED|FAILURE: Build failed|What went wrong|Execution failed|Caused by:|error:|ERROR:|cannot find symbol|not found|AAPT|Android resource linking failed|Manifest merger failed|compileDebugJavaWithJavac|parseDebugLocalResources|mergeDebugResources" build.log || true
+          echo "===== REAL ERROR FROM build.log ====="
+          grep -nEi \
+            "FAILURE:|What went wrong|Execution failed|^> Task .*FAILED|error:|ERROR:|Caused by:|cannot find symbol|not found|Android resource linking failed|Manifest merger failed|AAPT|Duplicate class|compileDebugJavaWithJavac|parseDebugLocalResources|mergeDebugResources|processDebugMainManifest" \
+            build.log build-stacktrace.log 2>/dev/null || true
 
           echo
-          echo "===== CONTEXT AROUND FAILURE ====="
-          awk '
-            /FAILED|FAILURE:|What went wrong|Execution failed|Caused by:|error:|cannot find symbol|Android resource linking failed|Manifest merger failed/ {
-              start=NR-25
-              end=NR+80
-              if (start < 1) start=1
-              ranges[start]=end
-            }
-            { lines[NR]=$0 }
-            END {
-              for (s in ranges) {
-                e=ranges[s]
-                print "----- lines " s " to " e " -----"
-                for (i=s; i<=e; i++) {
-                  if (i in lines) print i ": " lines[i]
-                }
-              }
-            }
-          ' build.log || true
+          echo "===== LAST 700 LINES build.log ====="
+          tail -n 700 build.log || true
 
           echo
-          echo "===== LAST 500 LINES ====="
-          tail -n 500 build.log || true
+          echo "===== LAST 700 LINES build-stacktrace.log ====="
+          tail -n 700 build-stacktrace.log || true
 
-      - name: Upload build log
+          echo
+          echo "===== BUILD REPORTS ====="
+          find . -type f \( -path "*/build/reports/*" -o -path "*/build/outputs/logs/*" \) -print -exec sed -n '1,220p' {} \; || true
+
+      - name: Upload build logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-log
+          name: build-logs
           path: |
             ${{ steps.locate.outputs.project_dir }}/build.log
+            ${{ steps.locate.outputs.project_dir }}/build-stacktrace.log
+            ${{ steps.locate.outputs.project_dir }}/app/build/reports/**
+            ${{ steps.locate.outputs.project_dir }}/app/build/outputs/logs/**
           if-no-files-found: warn
 
       - name: List APK outputs
@@ -182,7 +195,6 @@ jobs:
         shell: bash
         run: |
           cd "${{ steps.locate.outputs.project_dir }}"
-
           echo "===== APK OUTPUTS ====="
           find . -type f -name "*.apk" -print -exec ls -lh {} \; || true
 
