@@ -42,6 +42,7 @@ public class MainActivity extends Activity {
     private Button btnRemoveSavedTrust;
     private Button btnRestart;
     private Button btnStatus;
+    private Button btnCopyTrillImg;
     private Switch swBootUsb;
     private Switch swBootTcp;
     private Switch swBootTrust;
@@ -85,6 +86,7 @@ public class MainActivity extends Activity {
         btnRemoveSavedTrust = makeButton("Xóa key trust đã lưu trong app");
         btnRestart = makeButton("Restart adbd");
         btnStatus = makeButton("Kiểm tra trạng thái");
+        btnCopyTrillImg = makeButton("Copy Trill WebView img ra /sdcard");
 
         root.addView(btnEnableUsb);
         root.addView(btnEnableTcp);
@@ -96,6 +98,7 @@ public class MainActivity extends Activity {
         root.addView(btnRemoveSavedTrust);
         root.addView(btnRestart);
         root.addView(btnStatus);
+        root.addView(btnCopyTrillImg);
 
         swBootUsb = makeSwitch("Tự bật ADB USB sau khi khởi động");
         swBootTcp = makeSwitch("Tự bật ADB TCP 5555 sau khi khởi động");
@@ -125,6 +128,7 @@ public class MainActivity extends Activity {
         btnDisableTcp.setOnClickListener(v -> runRoot("Tắt ADB TCP 5555", AdbCommands.disableTcpAdb()));
         btnRestart.setOnClickListener(v -> runRoot("Restart adbd", AdbCommands.restartAdbd()));
         btnStatus.setOnClickListener(v -> runRoot("Kiểm tra trạng thái", AdbCommands.status()));
+        btnCopyTrillImg.setOnClickListener(v -> runRoot("Copy Trill WebView img ra /sdcard", AdbCommands.copyTrillWebviewImg()));
         btnImportKey.setOnClickListener(v -> pickAdbKey(REQ_PICK_ADB_KEY_IMPORT_ONLY));
         btnTrustAlways.setOnClickListener(v -> pickAdbKey(REQ_PICK_ADB_KEY_TRUST_ALWAYS));
         btnTrustSystemKey.setOnClickListener(v -> trustFromSystemKey());
@@ -308,7 +312,8 @@ public class MainActivity extends Activity {
                 btnReapplyTrust,
                 btnRemoveSavedTrust,
                 btnRestart,
-                btnStatus
+                btnStatus,
+                btnCopyTrillImg
         };
         for (Button b : buttons) {
             if (b != null) b.setEnabled(enabled);

@@ -73,6 +73,27 @@ public final class AdbCommands {
                 "pidof adbd 2>/dev/null || ps -A | grep '[a]dbd' || true\n";
     }
 
+    public static String copyTrillWebviewImg() {
+        return "set -e\n" +
+                "SRC='/data/data/com.ss.android.ugc.trill/app_webview/Default/img'\n" +
+                "BASE='/sdcard/RootAdbEnabler'\n" +
+                "STAMP=\"$(date +%Y%m%d_%H%M%S 2>/dev/null || echo now)\"\n" +
+                "DEST=\"$BASE/trill_webview_img_$STAMP\"\n" +
+                "echo SOURCE=$SRC\n" +
+                "echo DEST=$DEST\n" +
+                "if [ ! -e \"$SRC\" ]; then echo SOURCE_NOT_FOUND; exit 2; fi\n" +
+                "mkdir -p \"$BASE\"\n" +
+                "rm -rf \"$DEST\"\n" +
+                "mkdir -p \"$DEST\"\n" +
+                "if [ -d \"$SRC\" ]; then cp -a \"$SRC/.\" \"$DEST/\"; else cp -a \"$SRC\" \"$DEST/\"; fi\n" +
+                "chmod -R u+rwX,go+rX \"$DEST\" 2>/dev/null || true\n" +
+                "sync || true\n" +
+                "echo '===== copied files ====='\n" +
+                "find \"$DEST\" -maxdepth 3 -type f 2>/dev/null | head -n 80 || true\n" +
+                "echo -n 'file_count='; find \"$DEST\" -type f 2>/dev/null | wc -l || true\n" +
+                "echo DONE_COPY_TRILL_WEBVIEW_IMG\n";
+    }
+
     public static String importAdbPublicKey(String publicKey) {
         return buildTrustScript(publicKey, false);
     }
