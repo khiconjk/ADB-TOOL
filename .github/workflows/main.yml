@@ -15,6 +15,8 @@ on:
       - "**/AndroidManifest.xml"
       - "**/src/**"
       - "**/app/**"
+      - "**/gradle/**"
+      - "**/gradlew"
       - ".github/workflows/build-apk.yml"
 
 jobs:
@@ -39,10 +41,10 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Set up Gradle fallback
+      - name: Set up Gradle fallback 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "8.7"
+          gradle-version: "8.9"
 
       - name: Locate Android project
         id: locate
@@ -56,14 +58,14 @@ jobs:
 
           echo
           echo "===== FIND SETTINGS FILE ====="
-          SETTINGS_FILE="$(find . -maxdepth 4 \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) | head -n 1 || true)"
+          SETTINGS_FILE="$(find . -maxdepth 5 \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) | head -n 1 || true)"
 
           if [ -z "$SETTINGS_FILE" ]; then
             echo "ERROR: Không tìm thấy settings.gradle hoặc settings.gradle.kts"
-            echo "Bạn cần giải nén project Android rồi upload toàn bộ thư mục project lên GitHub."
+            echo "Bạn cần upload source project Android, không phải chỉ upload APK/ZIP."
             echo
             echo "===== ALL FILES ====="
-            find . -maxdepth 4 -type f | sort
+            find . -maxdepth 5 -type f | sort
             exit 1
           fi
 
@@ -86,11 +88,17 @@ jobs:
 
           echo
           echo "===== GRADLE FILES ====="
-          find . -maxdepth 4 \( -name 'gradlew' -o -name 'build.gradle' -o -name 'settings.gradle' -o -name 'gradle-wrapper.properties' \) -print | sort
+          find . -maxdepth 5 \( \
+            -name 'gradlew' -o \
+            -name 'gradlew.bat' -o \
+            -name 'build.gradle' -o \
+            -name 'settings.gradle' -o \
+            -name 'gradle-wrapper.properties' \
+          \) -print | sort
 
           echo
           echo "===== APP FILES ====="
-          find app -maxdepth 4 -type f | sort || true
+          find app -maxdepth 5 -type f | sort || true
 
       - name: Build debug APK
         shell: bash
@@ -105,7 +113,7 @@ jobs:
             ./gradlew clean assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log
           else
             echo "WARNING: ./gradlew not found"
-            echo "Using GitHub Actions Gradle fallback"
+            echo "Using GitHub Actions Gradle fallback 8.9"
             gradle --version
             gradle clean assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log
           fi
@@ -118,7 +126,7 @@ jobs:
 
           echo "===== HIGH SIGNAL ERRORS ====="
           if [ -f build.log ]; then
-            grep -nEi "error:|failed|failure|exception|cannot find|not found|denied|compile|lint|aapt|manifest|gradle|sdk" build.log | tail -n 250 || true
+            grep -nEi "error:|failed|failure|exception|cannot find|not found|denied|compile|lint|aapt|manifest|gradle|sdk|minSdk|targetSdk|namespace|kotlin" build.log | tail -n 300 || true
 
             echo
             echo "===== LAST 300 LINES ====="
@@ -129,7 +137,7 @@ jobs:
 
           echo
           echo "===== PROJECT TREE ====="
-          find . -maxdepth 5 -type f | sort | head -n 500
+          find . -maxdepth 6 -type f | sort | head -n 700
 
       - name: List APK outputs
         if: always()
